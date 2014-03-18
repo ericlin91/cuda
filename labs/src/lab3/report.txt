@@ -1,0 +1,161 @@
+Step 1:
+Optimization: First we started with a very naive implementation. This used a
+single thread to serially go through the image and bin each pixel (i.e., two
+for loops to go through each pixel of the image). Because it is serial, no
+atomic function was needed.
+
+Difficulties: Simple debugging issues
+
+Man-hours: 3
+
+Initial timing: 
+
+   Timing 'ref_2dhisto' started
+        GetTimeOfDay Time (for 10 iterations) = 0.112
+        Clock Time        (for 10 iterations) = 0.11
+    Timing 'ref_2dhisto' ended
+    Timing 'opt_2dhisto' started
+        GetTimeOfDay Time (for 10 iterations) = 46.794
+        Clock Time        (for 10 iterations) = 46.74
+    Timing 'opt_2dhisto' ended
+
+    Test PASSED
+
+
+Step 2:
+Optimization: Instead of doing everything completely serially, have each block 
+be responsible for a row of the image. For each block, a single thread looks at 
+each row of the image and does an atomicAdd to global memory. 
+
+Difficulties:
+
+Man-hours: 3 with most of the time just wasted playing around
+
+Speed-up: 126 X  
+
+    Timing 'ref_2dhisto' started
+        GetTimeOfDay Time (for 10 iterations) = 0.111
+        Clock Time        (for 10 iterations) = 0.11
+    Timing 'ref_2dhisto' ended
+    Timing 'opt_2dhisto' started
+        GetTimeOfDay Time (for 10 iterations) = 0.366
+        Clock Time        (for 10 iterations) = 0.37
+    Timing 'opt_2dhisto' ended
+
+    Test PASSED
+
+
+
+Step 3:
+Optimization: Instead of writing directly to global memory, first write to shared memory. Although shared memory is faster, there are now more memory accesses overall.
+
+Difficulties: Spent a long time trying to port example in slides (with coalesced memory access) before settling for this
+
+Man-hours: 2 
+
+Speed-up: 61 X
+
+    Timing 'ref_2dhisto' started
+        GetTimeOfDay Time (for 10 iterations) = 0.111
+        Clock Time        (for 10 iterations) = 0.11
+    Timing 'ref_2dhisto' ended
+    Timing 'opt_2dhisto' started
+        GetTimeOfDay Time (for 10 iterations) = 0.745
+        Clock Time        (for 10 iterations) = 0.74
+    Timing 'opt_2dhisto' ended
+
+
+Step 4: 
+Optimization: Added multiple threads per block (still one block per row) and coalesced memory accesses. 
+
+Difficulties: Getting the number of threads per block right.
+
+Man-hours: 0.45 
+
+Speed-up: 460 X
+
+    Timing 'ref_2dhisto' started
+        GetTimeOfDay Time (for 10 iterations) = 0.112
+        Clock Time        (for 10 iterations) = 0.12
+    Timing 'ref_2dhisto' ended
+    Timing 'opt_2dhisto' started
+        GetTimeOfDay Time (for 10 iterations) = 0.101
+        Clock Time        (for 10 iterations) = 0.1
+    Timing 'opt_2dhisto' ended
+
+    Test PASSED
+
+
+    Timing 'ref_2dhisto' started
+        GetTimeOfDay Time (for 1000 iterations) = 11.253
+        Clock Time        (for 1000 iterations) = 11.24
+    Timing 'ref_2dhisto' ended
+    Timing 'opt_2dhisto' started
+        GetTimeOfDay Time (for 1000 iterations) = 9.281
+        Clock Time        (for 1000 iterations) = 9.27
+    Timing 'opt_2dhisto' ended
+
+    Test PASSED
+
+
+Step 5:
+Optimization: Had each block responsible for multiple rows, coalesced memory access, write intermediate 
+results to shared memory, write final results to global memory.  
+
+Difficulties: Again, making sure the block and grid were the correct sizes
+
+Man-hours: 0.5
+
+Speed-up: 779 X
+
+
+    Timing 'ref_2dhisto' started
+        GetTimeOfDay Time (for 10 iterations) = 0.112
+        Clock Time        (for 10 iterations) = 0.12
+    Timing 'ref_2dhisto' ended
+    Timing 'opt_2dhisto' started
+        GetTimeOfDay Time (for 10 iterations) = 0.05
+        Clock Time        (for 10 iterations) = 0.06
+    Timing 'opt_2dhisto' ended
+
+    Test PASSED
+
+
+    Timing 'ref_2dhisto' started
+        GetTimeOfDay Time (for 1000 iterations) = 11.068
+        Clock Time        (for 1000 iterations) = 11.06
+    Timing 'ref_2dhisto' ended
+    Timing 'opt_2dhisto' started
+        GetTimeOfDay Time (for 1000 iterations) = 4.588
+        Clock Time        (for 1000 iterations) = 4.58
+    Timing 'opt_2dhisto' ended
+
+    Test PASSED
+
+
+
+
+
+
+
+
+
+Step 6:
+Optimization:  
+Difficulties:
+Man-hours: 
+Speed-up: 
+
+
+	 
+
+
+
+
+
+
+
+
+
+
+
