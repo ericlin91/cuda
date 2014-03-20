@@ -8,7 +8,7 @@
 #define NUM_BANKS 32
 #define LOG_NUM_BANKS 5
 // Lab4: You can use any other block size you wish.
-#define BLOCK_SIZE 256
+#define BLOCK_SIZE 1024 //256
 
 // Lab4: Host Helper Functions (allocate your own data structure...)
 
@@ -19,18 +19,21 @@
 // Lab4: Kernel Functions
 
 
-__global__ void scan_workefficient(float *g_odata, float *g_idata, int n)
+__global__ void scan_workefficient(float *g_odata, float *g_idata, float *g_sums, int n)
 {
     // Dynamically allocated shared memory for scan kernels
     extern  __shared__  float temp[];
 
     int thid = threadIdx.x;
 
+    int bid = blockIdx.x;
+
     int offset = 1;
 
     // Cache the computational window in shared memory
-    temp[2*thid]   = g_idata[2*thid];
-    temp[2*thid+1] = g_idata[2*thid+1];
+    int block_offset = BLOCK_SIZE*bid;
+    temp[2*thid]   = g_idata[2*(thid+block_offset)];
+    temp[2*thid+1] = g_idata[2*(thid+block_offset)+1];
 
     // build the sum in place up the tree
     for (int d = n>>1; d > 0; d >>= 1)
@@ -53,6 +56,7 @@ __global__ void scan_workefficient(float *g_odata, float *g_idata, int n)
     // clear the last element
     if (thid == 0)
     {
+    	g_sums[bid] = temp[n - 1];
         temp[n - 1] = 0;
     }   
 
@@ -76,19 +80,28 @@ __global__ void scan_workefficient(float *g_odata, float *g_idata, int n)
     __syncthreads();
 
     // write results to global memory
-    g_odata[2*thid]   = temp[2*thid];
-    g_odata[2*thid+1] = temp[2*thid+1];
+    g_odata[2*(thid+block_offset)]   = temp[2*thid];
+    g_odata[2*(thid+block_offset)+1] = temp[2*thid+1];
 }
 
+__global__ void consolidate(float *g_odata, float *g_sums)
+{
+	int thid = threadIdx.x;
+
+
+    // write results to global memory
+    g_odata[2*(thid+BLOCK_SIZE)]   += g_sums[0];
+    g_odata[2*(thid+BLOCK_SIZE)+1] += g_sums[0];
+}
 
 // **===-------- Lab4: Modify the body of this function -----------===**
 // You may need to make multiple kernel calls, make your own kernel
 // function in this file, and then call them from here.
-void prescanArray(float *outArray, float *inArray, int numElements)
+void prescanArray(float *outArray, float *inArray, float *sums,  int numElements)
 {
 
-	scan_workefficient<<<1,512,4096>>>(outArray, inArray,numElements);
-
+	scan_workefficient<<<2,BLOCK_SIZE,8192>>>(outArray, inArray, sums, numElements/2);
+	consolidate<<<1, BLOCK_SIZE, 8192>>>(outArray, sums);
 
 }
 // **===-----------------------------------------------------------===**

@@ -46,7 +46,7 @@
 // includes, kernels
 #include <scan_largearray_kernel.cu>  
 
-#define DEFAULT_NUM_ELEMENTS 1024 //16000000 
+#define DEFAULT_NUM_ELEMENTS 4096 //16000000 
 #define MAX_RAND 3
 
 
@@ -183,27 +183,35 @@ runTest( int argc, char** argv)
     // allocate device memory input and output arrays
     float* d_idata = NULL;
     float* d_odata = NULL;
+    float* sums = NULL;
+    float* incr = NULL;
 
     CUDA_SAFE_CALL( cudaMalloc( (void**) &d_idata, mem_size));
     CUDA_SAFE_CALL( cudaMalloc( (void**) &d_odata, mem_size));
+    CUDA_SAFE_CALL( cudaMalloc( (void**) &sums, mem_size));
+    //CUDA_SAFE_CALL( cudaMalloc( (void**) &sums, sizeof(float)*DEFAULT_NUM_ELEMENTS/2048));
+    //CUDA_SAFE_CALL( cudaMalloc( (void**) &incr, sizeof(float)*DEFAULT_NUM_ELEMENTS/2048));
     
     // copy host memory to device input array
     CUDA_SAFE_CALL( cudaMemcpy( d_idata, h_data, mem_size, cudaMemcpyHostToDevice) );
     // initialize all the other device arrays to be safe
     CUDA_SAFE_CALL( cudaMemcpy( d_odata, h_data, mem_size, cudaMemcpyHostToDevice) );
 
+    //CUDA_SAFE_CALL( cudaMemcpy( sums, h_data, mem_size, cudaMemcpyHostToDevice) );
+    //CUDA_SAFE_CALL( cudaMemcpy( incr, h_data, mem_size, cudaMemcpyHostToDevice) );
+
     // **===-----------------------------------------------------------===**
 
     // Run just once to remove startup overhead for more accurate performance 
     // measurement
-    prescanArray(d_odata, d_idata, 16);
+    prescanArray(d_odata, d_idata, sums, 16);
 
     // Run the prescan
     CUT_SAFE_CALL(cutCreateTimer(&timer));
     cutStartTimer(timer);
     
     // **===-------- Lab4: Modify the body of this function -----------===**
-    prescanArray(d_odata, d_idata, num_elements);
+    prescanArray(d_odata, d_idata, sums, num_elements);
     // **===-----------------------------------------------------------===**
     CUDA_SAFE_CALL( cudaThreadSynchronize() );
 
