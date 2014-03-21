@@ -46,7 +46,7 @@
 // includes, kernels
 #include <scan_largearray_kernel.cu>  
 
-#define DEFAULT_NUM_ELEMENTS 2097152*8 //16777216 //16000000 
+#define DEFAULT_NUM_ELEMENTS 16777216 
 #define MAX_RAND 3
 
 
@@ -89,6 +89,11 @@ runTest( int argc, char** argv)
     // allocate host memory to store the input data
     unsigned int mem_size = sizeof( float) * num_elements;
     float* h_data = (float*) malloc( mem_size);
+
+    //real_mem_size is the memsize rounded to the next highest power of two
+    //this is so we can memset to 0 later to enable non-power of two arrays
+    int exponent = (int)ceil(log2 ((double)DEFAULT_NUM_ELEMENTS));
+    int real_mem_size = (int)pow(2, exponent) * sizeof(float);
 
     // * No arguments: Randomly generate input data and compare against the 
     //   host's result.
@@ -188,24 +193,31 @@ runTest( int argc, char** argv)
     float* incr_sums = NULL;
     float* incr_incr = NULL;
 
-    CUDA_SAFE_CALL( cudaMalloc( (void**) &d_idata, mem_size));
-    CUDA_SAFE_CALL( cudaMalloc( (void**) &d_odata, mem_size));
+
+    CUDA_SAFE_CALL( cudaMalloc( (void**) &d_idata, real_mem_size));
+    CUDA_SAFE_CALL( cudaMalloc( (void**) &d_odata, real_mem_size));
 
     //the consolidation arrays
-    int num_blocks_needed = DEFAULT_NUM_ELEMENTS/(BLOCK_SIZE*2) + 1; //plus one is for leading zero so we have exclusive scan 
+    int num_blocks_needed = DEFAULT_NUM_ELEMENTS/(BLOCK_SIZE*2); //plus one is for leading zero so we have exclusive scan 
     CUDA_SAFE_CALL( cudaMalloc( (void**) &sums, sizeof(float)*num_blocks_needed));
     CUDA_SAFE_CALL( cudaMalloc( (void**) &incr, sizeof(float)*num_blocks_needed));
 
     CUDA_SAFE_CALL( cudaMalloc( (void**) &incr_sums, sizeof(float)*20));
     CUDA_SAFE_CALL( cudaMalloc( (void**) &incr_incr, sizeof(float)*20));
     
+    //memset crucial to enable non power of 2 arrays
+    CUDA_SAFE_CALL( cudaMemset( d_idata, 0, real_mem_size));
+    CUDA_SAFE_CALL( cudaMemset( d_odata, 0, real_mem_size));
+
+    CUDA_SAFE_CALL( cudaMemset( sums, 0, sizeof(float)*num_blocks_needed));
+    CUDA_SAFE_CALL( cudaMemset( incr, 0, sizeof(float)*num_blocks_needed));
+
     // copy host memory to device input array
     CUDA_SAFE_CALL( cudaMemcpy( d_idata, h_data, mem_size, cudaMemcpyHostToDevice) );
     // initialize all the other device arrays to be safe
     CUDA_SAFE_CALL( cudaMemcpy( d_odata, h_data, mem_size, cudaMemcpyHostToDevice) );
 
-    CUDA_SAFE_CALL( cudaMemset( sums, 0, sizeof(float)*num_blocks_needed));
-    CUDA_SAFE_CALL( cudaMemset( incr, 0, sizeof(float)*num_blocks_needed));
+
 
     CUDA_SAFE_CALL( cudaMemset( incr_sums, 0, sizeof(float)*20));
     CUDA_SAFE_CALL( cudaMemset( incr_incr, 0, sizeof(float)*20));
@@ -280,6 +292,8 @@ runTest( int argc, char** argv)
     // Check if the result is equivalent to the expected soluion
     unsigned int result_regtest = cutComparef( reference, h_data, num_elements);
     printf( "Test %s\n", (1 == result_regtest) ? "PASSED" : "FAILED");
+
+
 
     // cleanup memory
     cutDeleteTimer(timer);

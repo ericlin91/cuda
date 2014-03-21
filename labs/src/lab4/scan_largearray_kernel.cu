@@ -9,7 +9,7 @@
 #define LOG_NUM_BANKS 5
 // Lab4: You can use any other block size you wish.
 #define BLOCK_SIZE 1024 //256
-
+#define CONFLICT_FREE_OFFSET(index) ((index) >> LOG_NUM_BANKS)
 // Lab4: Host Helper Functions (allocate your own data structure...)
 
 
@@ -35,6 +35,17 @@ __global__ void scan_workefficient(float *g_odata, float *g_idata, float *g_sums
     temp[2*thid]   = g_idata[2*(thid+block_offset)];
     temp[2*thid+1] = g_idata[2*(thid+block_offset)+1];
 
+    int ai = thid;
+    int bi = thid + (n/2);
+
+    // // compute spacing to avoid bank conflicts
+    // int bankOffsetA = CONFLICT_FREE_OFFSET(ai);
+    // int bankOffsetB = CONFLICT_FREE_OFFSET(bi);
+
+    // // Cache the computational window in shared memory
+    // temp[ai + bankOffsetA] = g_idata[ai]; 
+    // temp[bi + bankOffsetB] = g_idata[bi]; 
+
     // build the sum in place up the tree
     for (int d = n>>1; d > 0; d >>= 1)
     {
@@ -44,6 +55,9 @@ __global__ void scan_workefficient(float *g_odata, float *g_idata, float *g_sums
         {
             int ai = offset*(2*thid+1)-1;
             int bi = offset*(2*thid+2)-1;
+
+            // ai += ai/NUM_BANKS;
+            // bi += bi/NUM_BANKS;
 
             temp[bi] += temp[ai];
         }
@@ -73,6 +87,9 @@ __global__ void scan_workefficient(float *g_odata, float *g_idata, float *g_sums
         {
             int ai = offset*(2*thid+1)-1;
             int bi = offset*(2*thid+2)-1;
+
+            // ai += ai/NUM_BANKS;
+            // bi += bi/NUM_BANKS;
 
             float t   = temp[ai];
             temp[ai]  = temp[bi];
@@ -136,23 +153,11 @@ void prescanArray(float *outArray, float *inArray, float *sums, float *incr, flo
     scan_workefficient<<<1,BLOCK_SIZE,8192>>>(incr_incr, incr_sums, NULL, 4, 0);
     update<<<4, BLOCK_SIZE, 8192>>>(incr, incr_incr, 0);
 
-
-
-
-
-
-
-
-
-	//then scan sums array
-	//scan_workefficient<<<1,BLOCK_SIZE,8192>>>(incr, sums, NULL, num_blocks);
-
 	update<<<num_blocks, BLOCK_SIZE, 8192>>>(outArray, incr, 0);
     update<<<num_blocks, BLOCK_SIZE, 8192>>>(outArray, incr, 2048);
     update<<<num_blocks, BLOCK_SIZE, 8192>>>(outArray, incr, 4096);
     update<<<num_blocks, BLOCK_SIZE, 8192>>>(outArray, incr, 6144);
-	//consolidate<<<1, BLOCK_SIZE, 8192>>>(outArray, incr);
-	//consolidate<<<1, BLOCK_SIZE, 8192>>>(outArray, sums);
+
 
 }
 // **===-----------------------------------------------------------===**
