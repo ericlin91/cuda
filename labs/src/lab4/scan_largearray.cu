@@ -46,7 +46,7 @@
 // includes, kernels
 #include <scan_largearray_kernel.cu>  
 
-#define DEFAULT_NUM_ELEMENTS 2097152*2 //16777216 //16000000 
+#define DEFAULT_NUM_ELEMENTS 2097152*8 //16777216 //16000000 
 #define MAX_RAND 3
 
 
@@ -185,6 +185,8 @@ runTest( int argc, char** argv)
     float* d_odata = NULL;
     float* sums = NULL;
     float* incr = NULL;
+    float* incr_sums = NULL;
+    float* incr_incr = NULL;
 
     CUDA_SAFE_CALL( cudaMalloc( (void**) &d_idata, mem_size));
     CUDA_SAFE_CALL( cudaMalloc( (void**) &d_odata, mem_size));
@@ -193,6 +195,9 @@ runTest( int argc, char** argv)
     int num_blocks_needed = DEFAULT_NUM_ELEMENTS/(BLOCK_SIZE*2) + 1; //plus one is for leading zero so we have exclusive scan 
     CUDA_SAFE_CALL( cudaMalloc( (void**) &sums, sizeof(float)*num_blocks_needed));
     CUDA_SAFE_CALL( cudaMalloc( (void**) &incr, sizeof(float)*num_blocks_needed));
+
+    CUDA_SAFE_CALL( cudaMalloc( (void**) &incr_sums, sizeof(float)*20));
+    CUDA_SAFE_CALL( cudaMalloc( (void**) &incr_incr, sizeof(float)*20));
     
     // copy host memory to device input array
     CUDA_SAFE_CALL( cudaMemcpy( d_idata, h_data, mem_size, cudaMemcpyHostToDevice) );
@@ -202,20 +207,21 @@ runTest( int argc, char** argv)
     CUDA_SAFE_CALL( cudaMemset( sums, 0, sizeof(float)*num_blocks_needed));
     CUDA_SAFE_CALL( cudaMemset( incr, 0, sizeof(float)*num_blocks_needed));
 
-
+    CUDA_SAFE_CALL( cudaMemset( incr_sums, 0, sizeof(float)*20));
+    CUDA_SAFE_CALL( cudaMemset( incr_incr, 0, sizeof(float)*20));
 
     // **===-----------------------------------------------------------===**
 
     // Run just once to remove startup overhead for more accurate performance 
     // measurement
-    prescanArray(d_odata, d_idata, sums, incr, 16);
+    prescanArray(d_odata, d_idata, sums, incr, incr_sums, incr_incr, 16);
 
     // Run the prescan
     CUT_SAFE_CALL(cutCreateTimer(&timer));
     cutStartTimer(timer);
     
     // **===-------- Lab4: Modify the body of this function -----------===**
-    prescanArray(d_odata, d_idata, sums, incr, num_elements);
+    prescanArray(d_odata, d_idata, sums, incr, incr_sums, incr_incr, num_elements);
     // **===-----------------------------------------------------------===**
     CUDA_SAFE_CALL( cudaThreadSynchronize() );
 
@@ -263,13 +269,13 @@ runTest( int argc, char** argv)
     //     // else
     //     //  printf("%i  gold %f    cuda %f \n",i,reference[i],h_data[i]);
     // }
-    for (int i=0; i<2;i +=1){
+    // for (int i=0; i<4096;i +=1){
 
 
-         printf("%i  sum %f    incr %f \n",i,h_sums[i],h_incr[i]);
-        // else
-        //  printf("%i  gold %f    cuda %f \n",i,reference[i],h_data[i]);
-    }
+    //      printf("%i  sum %f    incr %f \n",i,h_sums[i],h_incr[i]);
+    //     // else
+    //     //  printf("%i  gold %f    cuda %f \n",i,reference[i],h_data[i]);
+    // }
 
     // Check if the result is equivalent to the expected soluion
     unsigned int result_regtest = cutComparef( reference, h_data, num_elements);

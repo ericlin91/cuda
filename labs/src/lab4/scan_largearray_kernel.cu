@@ -19,14 +19,14 @@
 // Lab4: Kernel Functions
 
 
-__global__ void scan_workefficient(float *g_odata, float *g_idata, float *g_sums, int n)
+__global__ void scan_workefficient(float *g_odata, float *g_idata, float *g_sums, int n, int blockID_offset)
 {
     // Dynamically allocated shared memory for scan kernels
     extern  __shared__  float temp[];
 
     int thid = threadIdx.x;
 
-    int bid = blockIdx.x;
+    int bid = blockIdx.x + blockID_offset;
 
     int offset = 1;
 
@@ -99,11 +99,11 @@ __global__ void consolidate(float *g_odata, float *g_sums)
     // g_odata[2*(thid+BLOCK_SIZE)+1] += g_incr[1];
 }
 
-__global__ void update(float *g_odata, float *g_incr)
+__global__ void update(float *g_odata, float *g_incr, int blockID_offset)
 {
     int thid = threadIdx.x;
 
-    int bid = blockIdx.x;
+    int bid = blockIdx.x + blockID_offset;
 
     // Cache the computational window in shared memory
     int block_offset = BLOCK_SIZE*bid;
@@ -115,20 +115,42 @@ __global__ void update(float *g_odata, float *g_incr)
 // **===-------- Lab4: Modify the body of this function -----------===**
 // You may need to make multiple kernel calls, make your own kernel
 // function in this file, and then call them from here.
-void prescanArray(float *outArray, float *inArray, float *sums, float *incr, int numElements)
+void prescanArray(float *outArray, float *inArray, float *sums, float *incr, float *incr_sums, float *incr_incr, int numElements)
 {
 	int num_blocks = numElements/(BLOCK_SIZE*2);
 	if(num_blocks==0){
 		num_blocks = 1;
 	}
+    if(num_blocks>2048){
+        num_blocks=2048;
+    }
 
 	//first scan individual blocks
-	scan_workefficient<<<num_blocks,BLOCK_SIZE,8192>>>(outArray, inArray, sums, BLOCK_SIZE*2);
+	scan_workefficient<<<num_blocks,BLOCK_SIZE,8192>>>(outArray, inArray, sums, BLOCK_SIZE*2, 0);
+    scan_workefficient<<<num_blocks,BLOCK_SIZE,8192>>>(outArray, inArray, sums, BLOCK_SIZE*2, 2048);
+    scan_workefficient<<<num_blocks,BLOCK_SIZE,8192>>>(outArray, inArray, sums, BLOCK_SIZE*2, 4096);
+    scan_workefficient<<<num_blocks,BLOCK_SIZE,8192>>>(outArray, inArray, sums, BLOCK_SIZE*2, 6144);
+
+    //at this point, sums is ready to be scanned
+    scan_workefficient<<<4,BLOCK_SIZE,8192>>>(incr, sums, incr_sums, num_blocks, 0);
+    scan_workefficient<<<1,BLOCK_SIZE,8192>>>(incr_incr, incr_sums, NULL, 4, 0);
+    update<<<4, BLOCK_SIZE, 8192>>>(incr, incr_incr, 0);
+
+
+
+
+
+
+
+
 
 	//then scan sums array
-	scan_workefficient<<<1,BLOCK_SIZE,8192>>>(incr, sums, NULL, num_blocks);
+	//scan_workefficient<<<1,BLOCK_SIZE,8192>>>(incr, sums, NULL, num_blocks);
 
-	update<<<num_blocks, BLOCK_SIZE, 8192>>>(outArray, incr);
+	update<<<num_blocks, BLOCK_SIZE, 8192>>>(outArray, incr, 0);
+    update<<<num_blocks, BLOCK_SIZE, 8192>>>(outArray, incr, 2048);
+    update<<<num_blocks, BLOCK_SIZE, 8192>>>(outArray, incr, 4096);
+    update<<<num_blocks, BLOCK_SIZE, 8192>>>(outArray, incr, 6144);
 	//consolidate<<<1, BLOCK_SIZE, 8192>>>(outArray, incr);
 	//consolidate<<<1, BLOCK_SIZE, 8192>>>(outArray, sums);
 
