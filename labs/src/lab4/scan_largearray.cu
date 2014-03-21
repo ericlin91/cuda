@@ -46,7 +46,7 @@
 // includes, kernels
 #include <scan_largearray_kernel.cu>  
 
-#define DEFAULT_NUM_ELEMENTS 4096 //16000000 
+#define DEFAULT_NUM_ELEMENTS 2097152*2 //16777216 //16000000 
 #define MAX_RAND 3
 
 
@@ -188,30 +188,34 @@ runTest( int argc, char** argv)
 
     CUDA_SAFE_CALL( cudaMalloc( (void**) &d_idata, mem_size));
     CUDA_SAFE_CALL( cudaMalloc( (void**) &d_odata, mem_size));
-    CUDA_SAFE_CALL( cudaMalloc( (void**) &sums, mem_size));
-    //CUDA_SAFE_CALL( cudaMalloc( (void**) &sums, sizeof(float)*DEFAULT_NUM_ELEMENTS/2048));
-    //CUDA_SAFE_CALL( cudaMalloc( (void**) &incr, sizeof(float)*DEFAULT_NUM_ELEMENTS/2048));
+
+    //the consolidation arrays
+    int num_blocks_needed = DEFAULT_NUM_ELEMENTS/(BLOCK_SIZE*2) + 1; //plus one is for leading zero so we have exclusive scan 
+    CUDA_SAFE_CALL( cudaMalloc( (void**) &sums, sizeof(float)*num_blocks_needed));
+    CUDA_SAFE_CALL( cudaMalloc( (void**) &incr, sizeof(float)*num_blocks_needed));
     
     // copy host memory to device input array
     CUDA_SAFE_CALL( cudaMemcpy( d_idata, h_data, mem_size, cudaMemcpyHostToDevice) );
     // initialize all the other device arrays to be safe
     CUDA_SAFE_CALL( cudaMemcpy( d_odata, h_data, mem_size, cudaMemcpyHostToDevice) );
 
-    //CUDA_SAFE_CALL( cudaMemcpy( sums, h_data, mem_size, cudaMemcpyHostToDevice) );
-    //CUDA_SAFE_CALL( cudaMemcpy( incr, h_data, mem_size, cudaMemcpyHostToDevice) );
+    CUDA_SAFE_CALL( cudaMemset( sums, 0, sizeof(float)*num_blocks_needed));
+    CUDA_SAFE_CALL( cudaMemset( incr, 0, sizeof(float)*num_blocks_needed));
+
+
 
     // **===-----------------------------------------------------------===**
 
     // Run just once to remove startup overhead for more accurate performance 
     // measurement
-    prescanArray(d_odata, d_idata, sums, 16);
+    prescanArray(d_odata, d_idata, sums, incr, 16);
 
     // Run the prescan
     CUT_SAFE_CALL(cutCreateTimer(&timer));
     cutStartTimer(timer);
     
     // **===-------- Lab4: Modify the body of this function -----------===**
-    prescanArray(d_odata, d_idata, sums, num_elements);
+    prescanArray(d_odata, d_idata, sums, incr, num_elements);
     // **===-----------------------------------------------------------===**
     CUDA_SAFE_CALL( cudaThreadSynchronize() );
 
@@ -229,6 +233,14 @@ runTest( int argc, char** argv)
     CUDA_SAFE_CALL(cudaMemcpy( h_data, d_odata, sizeof(float) * num_elements, 
                                cudaMemcpyDeviceToHost));
 
+    float* h_sums = (float*) malloc( sizeof(float)*num_blocks_needed);
+    float* h_incr = (float*) malloc( sizeof(float)*num_blocks_needed);
+
+    CUDA_SAFE_CALL(cudaMemcpy( h_sums, sums, sizeof(float) * num_blocks_needed, 
+                               cudaMemcpyDeviceToHost));
+    CUDA_SAFE_CALL(cudaMemcpy( h_incr, incr, sizeof(float) * num_blocks_needed, 
+                               cudaMemcpyDeviceToHost));
+
     if ((argc - 1) == 3)  // Three Arguments, write result to file
     {
         WriteFile(h_data, argv[3], num_elements);
@@ -238,6 +250,26 @@ runTest( int argc, char** argv)
         WriteFile(h_data, argv[1], num_elements);
     }
 
+    //debug
+    int count = 0;
+    // int count_cuda = 0;
+    // for (int i=0; i<4096;i +=1){
+
+    //     count += reference[i];
+    //     count_cuda += h_data[i];
+
+    //     if (reference[i]==h_data[i])
+    //      printf("%i  gold %f    cuda %f \n",i,reference[i],h_data[i]);
+    //     // else
+    //     //  printf("%i  gold %f    cuda %f \n",i,reference[i],h_data[i]);
+    // }
+    for (int i=0; i<2;i +=1){
+
+
+         printf("%i  sum %f    incr %f \n",i,h_sums[i],h_incr[i]);
+        // else
+        //  printf("%i  gold %f    cuda %f \n",i,reference[i],h_data[i]);
+    }
 
     // Check if the result is equivalent to the expected soluion
     unsigned int result_regtest = cutComparef( reference, h_data, num_elements);

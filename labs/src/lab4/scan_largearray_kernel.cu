@@ -56,7 +56,10 @@ __global__ void scan_workefficient(float *g_odata, float *g_idata, float *g_sums
     // clear the last element
     if (thid == 0)
     {
-    	g_sums[bid] = temp[n - 1];
+    	if(g_sums){
+    		//g_sums[0] = 0;
+    		g_sums[bid] = temp[n - 1];
+    	}
         temp[n - 1] = 0;
     }   
 
@@ -92,16 +95,42 @@ __global__ void consolidate(float *g_odata, float *g_sums)
     // write results to global memory
     g_odata[2*(thid+BLOCK_SIZE)]   += g_sums[0];
     g_odata[2*(thid+BLOCK_SIZE)+1] += g_sums[0];
+    // g_odata[2*(thid+BLOCK_SIZE)]   += g_incr[1];
+    // g_odata[2*(thid+BLOCK_SIZE)+1] += g_incr[1];
+}
+
+__global__ void update(float *g_odata, float *g_incr)
+{
+    int thid = threadIdx.x;
+
+    int bid = blockIdx.x;
+
+    // Cache the computational window in shared memory
+    int block_offset = BLOCK_SIZE*bid;
+    g_odata[2*(thid+block_offset)] += g_incr[bid];
+    g_odata[2*(thid+block_offset)+1] += g_incr[bid];
+
 }
 
 // **===-------- Lab4: Modify the body of this function -----------===**
 // You may need to make multiple kernel calls, make your own kernel
 // function in this file, and then call them from here.
-void prescanArray(float *outArray, float *inArray, float *sums,  int numElements)
+void prescanArray(float *outArray, float *inArray, float *sums, float *incr, int numElements)
 {
+	int num_blocks = numElements/(BLOCK_SIZE*2);
+	if(num_blocks==0){
+		num_blocks = 1;
+	}
 
-	scan_workefficient<<<2,BLOCK_SIZE,8192>>>(outArray, inArray, sums, numElements/2);
-	consolidate<<<1, BLOCK_SIZE, 8192>>>(outArray, sums);
+	//first scan individual blocks
+	scan_workefficient<<<num_blocks,BLOCK_SIZE,8192>>>(outArray, inArray, sums, BLOCK_SIZE*2);
+
+	//then scan sums array
+	scan_workefficient<<<1,BLOCK_SIZE,8192>>>(incr, sums, NULL, num_blocks);
+
+	update<<<num_blocks, BLOCK_SIZE, 8192>>>(outArray, incr);
+	//consolidate<<<1, BLOCK_SIZE, 8192>>>(outArray, incr);
+	//consolidate<<<1, BLOCK_SIZE, 8192>>>(outArray, sums);
 
 }
 // **===-----------------------------------------------------------===**
